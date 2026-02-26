@@ -28,6 +28,10 @@ data/recordings/
 logs/
 *.log
 
+# Model files
+*.pt
+*.task
+
 # Testing
 .pytest_cache/
 .ruff_cache/

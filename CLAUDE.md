@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Gesture HUD is a real-time Iron Man-style AR command interface. It uses a webcam + MediaPipe hand tracking + YOLOv8 object detection to overlay a holographic HUD controlled entirely by hand gestures.
+AR Spellcaster — cast magic spells with hand gestures. Real-time particle effects, screen shake, chromatic aberration, and synthesized sound rendered on a live webcam feed. Uses MediaPipe hand tracking for gesture recognition and a custom particle engine for visuals.
 
 ## Environment Setup
 
@@ -19,14 +19,14 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the HUD
+# Run the spellcaster
 python scripts/run.py
 
 # Run with video file
 python scripts/run.py --source video.mp4
 
-# Run without object detection (faster)
-python scripts/run.py --no-detection
+# Run without audio
+python scripts/run.py --no-audio
 
 # Record output to video
 python scripts/record.py
@@ -45,16 +45,19 @@ ruff format src/ tests/
 
 ```
 src/
-├── core/       — Main HUD engine, OpenCV rendering pipeline
-├── vision/     — Camera capture, MediaPipe hands, YOLOv8 detection
-├── gestures/   — Gesture recognition, state machine (tap/hold/swipe)
-├── hud/        — Widget system: targeting, stats, radar, object tags, menu
-├── effects/    — Post-processing: glow, scanlines, holographic flicker
+├── core/       — SpellEngine orchestrator, rendering pipeline
+├── vision/     — Camera capture (OpenCV), MediaPipe hand tracking
+├── gestures/   — Rule-based gesture classifier, state machine (tap/hold/swipe)
+├── particles/  — Particle engine + emitters (burst/stream/ring/trail)
+├── spells/     — 6 spells + registry with mana/cooldowns
+├── effects/    — Glow, screen shake, flash, chromatic aberration
+├── audio/      — Procedural sound synthesis via numpy + sounddevice
 └── config.py   — Pydantic settings from YAML
 ```
 
 ## Key Dependencies
 
-- opencv-python, mediapipe, ultralytics (YOLOv8)
-- numpy, psutil, pydantic, pyyaml, rich
+- opencv-python, mediapipe, numpy
+- sounddevice (audio playback)
+- pydantic, pyyaml, rich
 - pytest, ruff
