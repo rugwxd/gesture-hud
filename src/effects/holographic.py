@@ -5,7 +5,6 @@ from __future__ import annotations
 import random
 import time
 
-import cv2
 import numpy as np
 
 from src.config import EffectsConfig

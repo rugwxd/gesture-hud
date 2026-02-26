@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import time
 
 import cv2
@@ -155,5 +154,6 @@ class ObjectTags(HUDWidget):
         bar_width = x2 - x1 - 8
         if bar_width > 20:
             fill = int(bar_width * conf)
-            cv2.rectangle(overlay, (x1 + 4, bar_y), (x1 + 4 + bar_width, bar_y + 3), (30, 30, 30), -1)
+            bg = (30, 30, 30)
+            cv2.rectangle(overlay, (x1 + 4, bar_y), (x1 + 4 + bar_width, bar_y + 3), bg, -1)
             cv2.rectangle(overlay, (x1 + 4, bar_y), (x1 + 4 + fill, bar_y + 3), color, -1)

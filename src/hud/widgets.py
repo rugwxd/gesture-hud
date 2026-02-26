@@ -9,8 +9,7 @@ from enum import Enum, auto
 
 import numpy as np
 
-from src.gestures.recognizer import GestureType
-from src.gestures.tracker import GestureEvent, GestureState
+from src.gestures.tracker import GestureState
 from src.vision.hands import HandData
 
 logger = logging.getLogger(__name__)

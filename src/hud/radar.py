@@ -97,9 +97,7 @@ class RadarWidget(HUDWidget):
             intensity = max(0, 1.0 - i / 30.0)
             trail_color = tuple(int(c * intensity * 0.3) for c in self.color)
             a1 = math.radians(trail_angle)
-            a2 = math.radians(trail_angle - 1.0)
             p1 = (int(cx + self.radius * math.cos(a1)), int(cy + self.radius * math.sin(a1)))
-            p2 = (int(cx + self.radius * math.cos(a2)), int(cy + self.radius * math.sin(a2)))
             cv2.line(overlay, (cx, cy), p1, trail_color, 1)
 
         # Blips
