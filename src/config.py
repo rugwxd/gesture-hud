@@ -1,4 +1,4 @@
-"""Configuration management for Gesture HUD."""
+"""Configuration management for AR Spellcaster."""
 
 from __future__ import annotations
 
@@ -32,14 +32,6 @@ class HandsConfig(BaseModel):
     min_tracking_confidence: float = 0.5
 
 
-class DetectionConfig(BaseModel):
-    """YOLOv8 object detection configuration."""
-
-    model: str = "yolov8n.pt"
-    confidence_threshold: float = 0.5
-    run_every_n_frames: int = 3
-
-
 class GesturesConfig(BaseModel):
     """Gesture recognition configuration."""
 
@@ -49,26 +41,28 @@ class GesturesConfig(BaseModel):
     debounce_frames: int = 5
 
 
-class HUDConfig(BaseModel):
-    """HUD display configuration."""
+class ParticlesConfig(BaseModel):
+    """Particle system configuration."""
 
-    default_mode: str = "combat"
-    color_primary: list[int] = Field(default_factory=lambda: [0, 255, 200])
-    color_secondary: list[int] = Field(default_factory=lambda: [255, 170, 0])
-    color_alert: list[int] = Field(default_factory=lambda: [255, 50, 50])
-    opacity: float = 0.8
-    font_scale: float = 0.6
-
-
-class EffectsConfig(BaseModel):
-    """Visual effects configuration."""
-
+    max_particles: int = 2000
     glow_enabled: bool = True
     glow_intensity: float = 0.3
-    scanlines_enabled: bool = True
-    scanline_gap: int = 3
-    holographic_flicker: bool = True
-    flicker_intensity: float = 0.05
+
+
+class SpellsConfig(BaseModel):
+    """Spell system configuration."""
+
+    max_mana: int = 100
+    mana_regen: float = 8.0
+    show_mana_bar: bool = True
+    show_spell_name: bool = True
+
+
+class AudioConfig(BaseModel):
+    """Audio configuration."""
+
+    enabled: bool = True
+    volume: float = 0.5
 
 
 class RecordingConfig(BaseModel):
@@ -87,14 +81,14 @@ class LoggingConfig(BaseModel):
 
 
 class Settings(BaseModel):
-    """Root configuration for Gesture HUD."""
+    """Root configuration for AR Spellcaster."""
 
     camera: CameraConfig = Field(default_factory=CameraConfig)
     hands: HandsConfig = Field(default_factory=HandsConfig)
-    detection: DetectionConfig = Field(default_factory=DetectionConfig)
     gestures: GesturesConfig = Field(default_factory=GesturesConfig)
-    hud: HUDConfig = Field(default_factory=HUDConfig)
-    effects: EffectsConfig = Field(default_factory=EffectsConfig)
+    particles: ParticlesConfig = Field(default_factory=ParticlesConfig)
+    spells: SpellsConfig = Field(default_factory=SpellsConfig)
+    audio: AudioConfig = Field(default_factory=AudioConfig)
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
@@ -136,5 +130,5 @@ def setup_logging(config: LoggingConfig) -> None:
     )
 
     # Suppress noisy library logs
-    for noisy in ("ultralytics", "mediapipe", "PIL"):
+    for noisy in ("mediapipe", "PIL", "sounddevice"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

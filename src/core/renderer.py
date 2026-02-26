@@ -1,177 +1,123 @@
-"""OpenCV rendering pipeline for the HUD overlay."""
+"""Rendering utilities for the AR Spellcaster overlay."""
 
 from __future__ import annotations
 
 import logging
-import math
 
 import cv2
 import numpy as np
 
-from src.config import HUDConfig
+from src.config import Settings
+from src.spells.registry import ManaSystem
 
 logger = logging.getLogger(__name__)
 
 
-class HUDRenderer:
-    """Rendering utilities for drawing HUD elements with OpenCV.
-
-    Provides methods for drawing sci-fi styled shapes, text, and
-    overlay compositing with transparency.
+class SpellRenderer:
+    """Renders HUD elements for the spellcaster: mana bar, spell names,
+    hand landmarks, and status indicators.
     """
 
-    def __init__(self, config: HUDConfig) -> None:
-        self.config = config
-        self.primary = tuple(config.color_primary)
-        self.secondary = tuple(config.color_secondary)
-        self.alert = tuple(config.color_alert)
-        self.opacity = config.opacity
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
         self.font = cv2.FONT_HERSHEY_SIMPLEX
-        self.font_scale = config.font_scale
+        self.show_mana = settings.spells.show_mana_bar
+        self.show_spell = settings.spells.show_spell_name
 
-    def create_overlay(self, width: int, height: int) -> np.ndarray:
-        """Create a transparent overlay frame."""
-        return np.zeros((height, width, 3), dtype=np.uint8)
+    def draw_mana_bar(self, frame: np.ndarray, mana: ManaSystem) -> None:
+        """Draw mana bar at the bottom of the screen."""
+        if not self.show_mana:
+            return
 
-    def composite(self, frame: np.ndarray, overlay: np.ndarray) -> np.ndarray:
-        """Blend the overlay onto the frame with transparency."""
-        mask = np.any(overlay > 0, axis=2)
-        result = frame.copy()
-        result[mask] = cv2.addWeighted(frame, 1.0 - self.opacity, overlay, self.opacity, 0)[mask]
-        return result
-
-    def draw_text(
-        self,
-        frame: np.ndarray,
-        text: str,
-        position: tuple[int, int],
-        color: tuple[int, int, int] | None = None,
-        scale: float | None = None,
-        thickness: int = 1,
-    ) -> None:
-        """Draw text with optional glow effect."""
-        color = color or self.primary
-        scale = scale or self.font_scale
-        cv2.putText(frame, text, position, self.font, scale, color, thickness, cv2.LINE_AA)
-
-    def draw_crosshair(
-        self,
-        frame: np.ndarray,
-        center: tuple[int, int],
-        size: int = 30,
-        color: tuple[int, int, int] | None = None,
-        thickness: int = 1,
-    ) -> None:
-        """Draw a targeting crosshair."""
-        color = color or self.primary
-        cx, cy = center
-
-        # Horizontal lines with gap
-        gap = size // 3
-        cv2.line(frame, (cx - size, cy), (cx - gap, cy), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (cx + gap, cy), (cx + size, cy), color, thickness, cv2.LINE_AA)
-
-        # Vertical lines with gap
-        cv2.line(frame, (cx, cy - size), (cx, cy - gap), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (cx, cy + gap), (cx, cy + size), color, thickness, cv2.LINE_AA)
-
-    def draw_corner_brackets(
-        self,
-        frame: np.ndarray,
-        top_left: tuple[int, int],
-        bottom_right: tuple[int, int],
-        color: tuple[int, int, int] | None = None,
-        length: int = 20,
-        thickness: int = 1,
-    ) -> None:
-        """Draw corner bracket decorations around a rectangle."""
-        color = color or self.primary
-        x1, y1 = top_left
-        x2, y2 = bottom_right
-
-        # Top-left
-        cv2.line(frame, (x1, y1), (x1 + length, y1), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (x1, y1), (x1, y1 + length), color, thickness, cv2.LINE_AA)
-
-        # Top-right
-        cv2.line(frame, (x2, y1), (x2 - length, y1), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (x2, y1), (x2, y1 + length), color, thickness, cv2.LINE_AA)
-
-        # Bottom-left
-        cv2.line(frame, (x1, y2), (x1 + length, y2), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (x1, y2), (x1, y2 - length), color, thickness, cv2.LINE_AA)
-
-        # Bottom-right
-        cv2.line(frame, (x2, y2), (x2 - length, y2), color, thickness, cv2.LINE_AA)
-        cv2.line(frame, (x2, y2), (x2, y2 - length), color, thickness, cv2.LINE_AA)
-
-    def draw_arc(
-        self,
-        frame: np.ndarray,
-        center: tuple[int, int],
-        radius: int,
-        start_angle: float,
-        end_angle: float,
-        color: tuple[int, int, int] | None = None,
-        thickness: int = 1,
-    ) -> None:
-        """Draw an arc (partial circle)."""
-        color = color or self.primary
-        cv2.ellipse(
-            frame,
-            center,
-            (radius, radius),
-            0,
-            start_angle,
-            end_angle,
-            color,
-            thickness,
-            cv2.LINE_AA,
-        )
-
-    def draw_progress_bar(
-        self,
-        frame: np.ndarray,
-        position: tuple[int, int],
-        width: int,
-        height: int,
-        progress: float,
-        color: tuple[int, int, int] | None = None,
-        bg_color: tuple[int, int, int] = (40, 40, 40),
-    ) -> None:
-        """Draw a horizontal progress bar."""
-        color = color or self.primary
-        x, y = position
-        progress = max(0.0, min(1.0, progress))
+        h, w = frame.shape[:2]
+        bar_width = int(w * 0.4)
+        bar_height = 8
+        x = (w - bar_width) // 2
+        y = h - 30
 
         # Background
-        cv2.rectangle(frame, (x, y), (x + width, y + height), bg_color, -1)
+        cv2.rectangle(
+            frame,
+            (x - 1, y - 1),
+            (x + bar_width + 1, y + bar_height + 1),
+            (40, 40, 40),
+            -1,
+        )
 
-        # Fill
-        fill_width = int(width * progress)
+        # Mana fill
+        fill_width = int(bar_width * mana.ratio)
         if fill_width > 0:
-            cv2.rectangle(frame, (x, y), (x + fill_width, y + height), color, -1)
+            # Color transitions from blue to cyan based on mana level
+            blue = int(200 + 55 * mana.ratio)
+            green = int(100 * mana.ratio)
+            color = (blue, green, 0)
+            cv2.rectangle(frame, (x, y), (x + fill_width, y + bar_height), color, -1)
 
-        # Border
-        cv2.rectangle(frame, (x, y), (x + width, y + height), color, 1)
+        # Border glow
+        border_color = (180, 80, 0) if mana.ratio > 0.2 else (0, 0, 200)
+        cv2.rectangle(
+            frame,
+            (x - 1, y - 1),
+            (x + bar_width + 1, y + bar_height + 1),
+            border_color,
+            1,
+        )
 
-    def draw_hexagon(
-        self,
-        frame: np.ndarray,
-        center: tuple[int, int],
-        radius: int,
-        color: tuple[int, int, int] | None = None,
-        thickness: int = 1,
-    ) -> None:
-        """Draw a regular hexagon."""
-        color = color or self.primary
-        cx, cy = center
-        points = []
-        for i in range(6):
-            angle = math.radians(60 * i - 30)
-            px = int(cx + radius * math.cos(angle))
-            py = int(cy + radius * math.sin(angle))
-            points.append([px, py])
+        # Mana text
+        text = f"MANA {int(mana.current_mana)}/{mana.max_mana}"
+        text_size = cv2.getTextSize(text, self.font, 0.4, 1)[0]
+        tx = x + (bar_width - text_size[0]) // 2
+        ty = y - 5
+        cv2.putText(frame, text, (tx, ty), self.font, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
 
-        pts = np.array(points, dtype=np.int32)
-        cv2.polylines(frame, [pts], isClosed=True, color=color, thickness=thickness)
+    def draw_spell_name(self, frame: np.ndarray, name: str) -> None:
+        """Draw the currently active spell name at top of screen."""
+        if not self.show_spell:
+            return
+
+        h, w = frame.shape[:2]
+        display_name = name.upper().replace("_", " ")
+        text_size = cv2.getTextSize(display_name, self.font, 0.8, 2)[0]
+        tx = (w - text_size[0]) // 2
+        ty = 40
+
+        # Shadow
+        cv2.putText(
+            frame, display_name, (tx + 1, ty + 1),
+            self.font, 0.8, (0, 0, 0), 3, cv2.LINE_AA,
+        )
+        # Text
+        cv2.putText(
+            frame, display_name, (tx, ty),
+            self.font, 0.8, (0, 200, 255), 2, cv2.LINE_AA,
+        )
+
+    def draw_landmarks(self, frame: np.ndarray, hands: list) -> None:
+        """Draw subtle hand landmark connections."""
+        color = (0, 128, 100)
+        height, width = frame.shape[:2]
+
+        for hand in hands:
+            points = [
+                (int(lm.x * width), int(lm.y * height))
+                for lm in hand.landmarks
+            ]
+
+            connections = [
+                (0, 1), (1, 2), (2, 3), (3, 4),
+                (0, 5), (5, 6), (6, 7), (7, 8),
+                (0, 9), (9, 10), (10, 11), (11, 12),
+                (0, 13), (13, 14), (14, 15), (15, 16),
+                (0, 17), (17, 18), (18, 19), (19, 20),
+                (5, 9), (9, 13), (13, 17),
+            ]
+
+            for start, end in connections:
+                if start < len(points) and end < len(points):
+                    cv2.line(
+                        frame, points[start], points[end],
+                        color, 1, cv2.LINE_AA,
+                    )
+
+            for pt in points:
+                cv2.circle(frame, pt, 2, color, -1)

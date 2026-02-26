@@ -6,6 +6,8 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from src.audio.player import AudioPlayer
 from src.effects.screen import ScreenEffects
 from src.gestures.tracker import GestureEvent

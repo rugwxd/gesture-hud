@@ -1,4 +1,4 @@
-# Gesture HUD — Default Configuration
+# AR Spellcaster — Default Configuration
 
 camera:
   device_id: 0
@@ -11,32 +11,26 @@ hands:
   min_detection_confidence: 0.7
   min_tracking_confidence: 0.5
 
-detection:
-  model: "yolov8n.pt"
-  confidence_threshold: 0.5
-  run_every_n_frames: 3
-
 gestures:
   swipe_threshold: 0.08
   hold_duration: 0.5
   tap_max_duration: 0.3
   debounce_frames: 5
 
-hud:
-  default_mode: "combat"
-  color_primary: [0, 255, 200]
-  color_secondary: [255, 170, 0]
-  color_alert: [255, 50, 50]
-  opacity: 0.8
-  font_scale: 0.6
-
-effects:
+particles:
+  max_particles: 2000
   glow_enabled: true
   glow_intensity: 0.3
-  scanlines_enabled: true
-  scanline_gap: 3
-  holographic_flicker: true
-  flicker_intensity: 0.05
+
+spells:
+  max_mana: 100
+  mana_regen: 8.0
+  show_mana_bar: true
+  show_spell_name: true
+
+audio:
+  enabled: true
+  volume: 0.5
 
 recording:
   output_dir: "data/recordings"

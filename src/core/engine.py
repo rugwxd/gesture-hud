@@ -1,79 +1,109 @@
-"""Main HUD engine orchestrating all components."""
+"""Main spell engine orchestrating camera, tracking, gestures, and spells."""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from pathlib import Path
+import time
 
 import cv2
-import numpy as np
 
+from src.audio.player import AudioPlayer
 from src.config import Settings
-from src.core.renderer import HUDRenderer
-from src.effects.holographic import EffectsPipeline
-from src.gestures.recognizer import GestureRecognizer, GestureType
+from src.core.renderer import SpellRenderer
+from src.effects.glow import apply_glow
+from src.effects.screen import ScreenEffects
+from src.gestures.recognizer import GestureRecognizer
 from src.gestures.tracker import GestureEvent, GestureTracker
-from src.hud.menu import ModeMenu
-from src.hud.object_tags import ObjectTags
-from src.hud.radar import RadarWidget
-from src.hud.stats import StatsPanel
-from src.hud.targeting import TargetingReticle
-from src.hud.widgets import HUDMode, HUDState, WidgetRegistry
+from src.particles.engine import ParticleEngine
+from src.spells.fireball import Fireball
+from src.spells.force_push import ForcePush
+from src.spells.lightning import Lightning
+from src.spells.registry import SpellRegistry
+from src.spells.shield import Shield
+from src.spells.teleport import Teleport
+from src.spells.wind import Wind
 from src.vision.camera import Camera
-from src.vision.detector import ObjectDetector
 from src.vision.hands import HandTracker
 
 logger = logging.getLogger(__name__)
 
 
-class HUDEngine:
-    """Main engine that orchestrates camera capture, hand tracking, gesture
-    recognition, object detection, HUD rendering, and effects.
+class SpellEngine:
+    """Main engine that orchestrates camera, hand tracking, gesture
+    recognition, spell casting, particle rendering, and screen effects.
 
-    This is the core loop that ties everything together.
+    This is the core loop. Webcam → hand tracking → gesture recognition
+    → spell registry → particles + screen effects → display.
     """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-        # Vision components
+        # Vision
         self.camera = Camera(settings.camera)
         self.hand_tracker = HandTracker(settings.hands)
-        self.detector = ObjectDetector(settings.detection)
 
-        # Gesture components
+        # Gestures
         self.gesture_recognizer = GestureRecognizer()
         self.gesture_tracker = GestureTracker(settings.gestures)
 
-        # Rendering
-        self.renderer = HUDRenderer(settings.hud)
-        self.effects = EffectsPipeline(settings.effects)
+        # Particles and effects
+        self.particles = ParticleEngine(max_particles=settings.particles.max_particles)
+        self.screen_fx = ScreenEffects()
 
-        # HUD widgets
-        self.widget_registry = WidgetRegistry()
-        self.mode_menu = ModeMenu()
-        self._current_mode = HUDMode.COMBAT
+        # Audio
+        self.audio = AudioPlayer(
+            enabled=settings.audio.enabled,
+            volume=settings.audio.volume,
+        )
 
-        self._setup_widgets()
+        # Spell registry
+        self.registry = SpellRegistry(
+            particles=self.particles,
+            screen_fx=self.screen_fx,
+            audio=self.audio,
+            max_mana=settings.spells.max_mana,
+            mana_regen=settings.spells.mana_regen,
+        )
+
+        # Renderer
+        self.renderer = SpellRenderer(settings)
+
+        # Register all spells
+        self._register_spells()
 
         # State
         self._running = False
         self._frame_count = 0
+        self._last_time = 0.0
+        self._active_shield: Shield | None = None
+        self._last_gesture_name: str = ""
+        self._glow_enabled = settings.particles.glow_enabled
+        self._glow_intensity = settings.particles.glow_intensity
 
-    def _setup_widgets(self) -> None:
-        """Register all HUD widgets."""
-        primary = tuple(self.settings.hud.color_primary)
-        secondary = tuple(self.settings.hud.color_secondary)
+    def _register_spells(self) -> None:
+        """Register gesture-to-spell mappings."""
+        # Fist hold → Shield
+        self.registry.register("hold_start_fist", Shield)
 
-        self.widget_registry.register(self.mode_menu)
-        self.widget_registry.register(TargetingReticle(color=primary))
-        self.widget_registry.register(StatsPanel(color=primary))
-        self.widget_registry.register(RadarWidget(color=primary))
-        self.widget_registry.register(ObjectTags(color=primary, secondary_color=secondary))
+        # Open palm tap → Force Push
+        self.registry.register("tap_open_palm", ForcePush)
+
+        # Point hold → Lightning
+        self.registry.register("hold_start_point", Lightning)
+
+        # Swipe left/right → Wind
+        self.registry.register("swipe_left", Wind)
+        self.registry.register("swipe_right", Wind)
+
+        # Pinch tap → Teleport (pinch then release)
+        self.registry.register("tap_pinch", Teleport)
+
+        # Open palm swipe up → Fireball
+        self.registry.register("swipe_up", Fireball)
 
     def run(self, source: str | None = None) -> None:
-        """Run the main HUD loop.
+        """Run the main spell engine loop.
 
         Args:
             source: Optional video file path. If None, uses webcam.
@@ -86,23 +116,21 @@ class HUDEngine:
             return
 
         self._running = True
-        logger.info("HUD engine started")
+        self._last_time = time.time()
+        logger.info("Spell engine started")
 
         try:
             while self._running:
                 self._process_frame()
 
-                # Handle keyboard input
                 key = cv2.waitKey(1) & 0xFF
-                if key == ord("q") or key == 27:  # q or ESC
+                if key == ord("q") or key == 27:
                     break
-                elif key == ord("s"):
-                    self._take_screenshot()
         finally:
             self._cleanup()
 
     def _process_frame(self) -> None:
-        """Process a single frame through the full pipeline."""
+        """Process a single frame through the full spell pipeline."""
         frame_data = self.camera.read()
         if frame_data is None:
             self._running = False
@@ -111,105 +139,107 @@ class HUDEngine:
         frame = frame_data.image
         self._frame_count += 1
 
+        # Delta time
+        now = time.time()
+        dt = min(now - self._last_time, 0.1)  # Cap at 100ms
+        self._last_time = now
+
         # 1. Hand tracking
         hands = self.hand_tracker.process(frame)
 
-        # 2. Gesture recognition (use first hand)
+        # 2. Gesture recognition
         gesture_result = None
         gesture_state = None
+        hand_x: float | None = None
+        hand_y: float | None = None
+
         if hands:
             gesture_result = self.gesture_recognizer.classify(hands[0])
             gesture_state = self.gesture_tracker.update(gesture_result)
+            hand_x = hands[0].center.x
+            hand_y = hands[0].center.y
+            self._last_gesture_name = gesture_result.gesture.name.lower()
         else:
             gesture_state = self.gesture_tracker.update(None)
 
-        # 3. Object detection
-        detections = self.detector.detect(frame)
-        detection_dicts = [d.to_dict() for d in detections]
+        # 3. Handle gesture events → cast spells
+        if gesture_state and gesture_state.event != GestureEvent.NONE:
+            self._handle_gesture_event(
+                gesture_state.event,
+                hand_x or 0.5,
+                hand_y or 0.5,
+            )
 
-        # 4. Check for screenshot gesture
-        if gesture_state and gesture_state.event == GestureEvent.HOLD_START:
-            if gesture_state.current_gesture == GestureType.THUMBS_UP:
-                self._take_screenshot(frame)
+        # 4. Handle shield dismissal on hold end
+        if gesture_state and gesture_state.event == GestureEvent.HOLD_END:
+            self._dismiss_active_shield()
 
-        # 5. Build HUD state
-        width, height = frame.shape[1], frame.shape[0]
-        hud_state = HUDState(
-            frame_size=(width, height),
-            hands=hands,
-            gesture_state=gesture_state,
-            detections=detection_dicts,
-            mode=self._current_mode,
-            fps=0,
-            frame_number=self._frame_count,
+        # 5. Update all spells and particles
+        self.registry.update(dt, hand_x, hand_y)
+        self.particles.update(dt)
+        self.screen_fx.update(dt)
+
+        # 6. Render particles onto frame
+        frame = self.particles.render(frame)
+
+        # 7. Render spell overlays (lightning bolts, shield hex, etc.)
+        frame = self.registry.render(frame)
+
+        # 8. Apply glow effect
+        if self._glow_enabled and self.particles.count > 0:
+            frame = apply_glow(frame, intensity=self._glow_intensity)
+
+        # 9. Apply screen effects (shake, flash, aberration)
+        frame = self.screen_fx.apply(frame)
+
+        # 10. Draw hand landmarks
+        self.renderer.draw_landmarks(frame, hands)
+
+        # 11. Draw mana bar and spell info
+        self.renderer.draw_mana_bar(frame, self.registry.mana)
+        if self.registry.active_spells:
+            spell_name = self.registry.active_spells[-1].name
+            self.renderer.draw_spell_name(frame, spell_name)
+
+        # 12. Display
+        cv2.imshow("AR Spellcaster", frame)
+
+    def _handle_gesture_event(
+        self,
+        event: GestureEvent,
+        hand_x: float,
+        hand_y: float,
+    ) -> None:
+        """Route gesture events to the spell registry."""
+        spell = self.registry.handle_event(
+            event, hand_x, hand_y, self._last_gesture_name,
         )
 
-        # 6. Update and render widgets
-        overlay = self.renderer.create_overlay(width, height)
-        self.widget_registry.update_all(hud_state)
-        overlay = self.widget_registry.render_all(overlay, hud_state)
+        # Track shield for dismissal
+        if spell is not None and isinstance(spell, Shield):
+            self._active_shield = spell
 
-        # Update mode from menu widget
-        self._current_mode = self.mode_menu.current_mode
+        # Set wind direction based on swipe direction
+        if spell is not None and isinstance(spell, Wind):
+            if event == GestureEvent.SWIPE_LEFT:
+                spell.set_direction(-1.0)
+            else:
+                spell.set_direction(1.0)
 
-        # 7. Composite overlay onto frame
-        result = self.renderer.composite(frame, overlay)
-
-        # 8. Apply effects
-        result = self.effects.apply(result)
-
-        # 9. Draw hand landmarks (subtle)
-        self._draw_landmarks(result, hands)
-
-        # 10. Display
-        cv2.imshow("Gesture HUD", result)
-
-    def _draw_landmarks(self, frame: np.ndarray, hands: list) -> None:
-        """Draw subtle hand landmark connections."""
-        color = tuple(c // 2 for c in self.settings.hud.color_primary)
-        height, width = frame.shape[:2]
-
-        for hand in hands:
-            points = [(int(lm.x * width), int(lm.y * height)) for lm in hand.landmarks]
-
-            # Draw connections between landmarks
-            connections = [
-                (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
-                (0, 5), (5, 6), (6, 7), (7, 8),  # Index
-                (0, 9), (9, 10), (10, 11), (11, 12),  # Middle
-                (0, 13), (13, 14), (14, 15), (15, 16),  # Ring
-                (0, 17), (17, 18), (18, 19), (19, 20),  # Pinky
-                (5, 9), (9, 13), (13, 17),  # Palm
-            ]
-
-            for start, end in connections:
-                if start < len(points) and end < len(points):
-                    cv2.line(frame, points[start], points[end], color, 1, cv2.LINE_AA)
-
-            # Draw small dots at joints
-            for pt in points:
-                cv2.circle(frame, pt, 2, color, -1)
-
-    def _take_screenshot(self, frame: np.ndarray | None = None) -> None:
-        """Save the current frame as a screenshot."""
-        output_dir = Path(self.settings.recording.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = output_dir / f"screenshot_{timestamp}.png"
-
-        if frame is not None:
-            cv2.imwrite(str(filepath), frame)
-            logger.info("Screenshot saved: %s", filepath)
+    def _dismiss_active_shield(self) -> None:
+        """Dismiss the shield when the fist hold ends."""
+        if self._active_shield is not None and self._active_shield.is_alive():
+            self._active_shield.dismiss()
+            self._active_shield = None
 
     def _cleanup(self) -> None:
         """Release all resources."""
         self._running = False
         self.camera.release()
         self.hand_tracker.release()
-        self.detector.release()
+        self.audio.stop()
         cv2.destroyAllWindows()
-        logger.info("HUD engine stopped")
+        logger.info("Spell engine stopped")
 
     def stop(self) -> None:
         """Signal the engine to stop."""

@@ -1,40 +1,46 @@
-"""Bloom/glow post-processing effect."""
+"""Bloom/glow post-processing effect for spell visuals."""
 
 from __future__ import annotations
 
 import cv2
 import numpy as np
 
-from src.config import EffectsConfig
 
-
-class GlowEffect:
-    """Adds a bloom/glow effect to bright pixels in the frame.
+def apply_glow(
+    frame: np.ndarray,
+    intensity: float = 0.3,
+    threshold: int = 180,
+    blur_size: int = 21,
+) -> np.ndarray:
+    """Apply a bloom/glow effect to bright pixels in the frame.
 
     Extracts bright areas, applies Gaussian blur, and additively
-    blends them back onto the original frame.
+    blends them back onto the original frame. Makes spell particles
+    and effects look more magical.
+
+    Args:
+        frame: BGR image to process.
+        intensity: Blend strength of the glow (0-1).
+        threshold: Brightness threshold for glow extraction.
+        blur_size: Gaussian blur kernel size (must be odd).
+
+    Returns:
+        Frame with glow effect applied.
     """
+    if intensity <= 0:
+        return frame
 
-    def __init__(self, config: EffectsConfig) -> None:
-        self.enabled = config.glow_enabled
-        self.intensity = config.glow_intensity
+    # Extract bright areas
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    _, bright_mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
 
-    def apply(self, frame: np.ndarray) -> np.ndarray:
-        """Apply glow effect to the frame."""
-        if not self.enabled or self.intensity <= 0:
-            return frame
+    # Apply mask to get bright pixels only
+    bright = cv2.bitwise_and(frame, frame, mask=bright_mask)
 
-        # Extract bright areas
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, bright_mask = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+    # Blur the bright areas
+    blurred = cv2.GaussianBlur(bright, (blur_size, blur_size), 0)
 
-        # Apply mask to get bright pixels only
-        bright = cv2.bitwise_and(frame, frame, mask=bright_mask)
+    # Additive blend
+    result = cv2.addWeighted(frame, 1.0, blurred, intensity, 0)
 
-        # Blur the bright areas
-        blurred = cv2.GaussianBlur(bright, (21, 21), 0)
-
-        # Additive blend
-        result = cv2.addWeighted(frame, 1.0, blurred, self.intensity, 0)
-
-        return np.clip(result, 0, 255).astype(np.uint8)
+    return np.clip(result, 0, 255).astype(np.uint8)
