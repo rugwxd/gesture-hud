@@ -43,7 +43,7 @@ class DetectionConfig(BaseModel):
 class GesturesConfig(BaseModel):
     """Gesture recognition configuration."""
 
-    swipe_threshold: float = 0.15
+    swipe_threshold: float = 0.08
     hold_duration: float = 0.5
     tap_max_duration: float = 0.3
     debounce_frames: int = 5

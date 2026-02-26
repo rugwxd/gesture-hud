@@ -17,7 +17,7 @@ detection:
   run_every_n_frames: 3
 
 gestures:
-  swipe_threshold: 0.15
+  swipe_threshold: 0.08
   hold_duration: 0.5
   tap_max_duration: 0.3
   debounce_frames: 5

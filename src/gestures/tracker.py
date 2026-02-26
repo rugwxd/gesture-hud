@@ -145,20 +145,22 @@ class GestureTracker:
         return 0 < duration < self.config.tap_max_duration
 
     def _detect_swipe(self) -> GestureEvent:
-        """Detect swipe from hand center velocity."""
+        """Detect swipe from hand center velocity over a short window."""
         if len(self._position_history) < 5:
             return GestureEvent.NONE
 
-        # Compare recent position to position ~0.3s ago
         recent_pos, recent_time = self._position_history[-1]
-        oldest_pos, oldest_time = self._position_history[0]
 
-        dt = recent_time - oldest_time
-        if dt < 0.1 or dt > 0.5:
+        # Look back ~8-10 frames (~0.3s at 30fps) instead of the full buffer
+        lookback = min(10, len(self._position_history) - 1)
+        past_pos, past_time = self._position_history[-1 - lookback]
+
+        dt = recent_time - past_time
+        if dt < 0.05 or dt > 0.6:
             return GestureEvent.NONE
 
-        dx = recent_pos.x - oldest_pos.x
-        dy = recent_pos.y - oldest_pos.y
+        dx = recent_pos.x - past_pos.x
+        dy = recent_pos.y - past_pos.y
 
         threshold = self.config.swipe_threshold
 
