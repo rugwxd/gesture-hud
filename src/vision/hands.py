@@ -6,12 +6,20 @@ import logging
 import math
 from dataclasses import dataclass, field
 from enum import IntEnum
+from pathlib import Path
 
 import numpy as np
 
 from src.config import HandsConfig
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
+MODEL_PATH = PROJECT_ROOT / "data" / "models" / "hand_landmarker.task"
+MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
+)
 
 # MediaPipe hand landmark indices
 WRIST = 0
@@ -150,33 +158,73 @@ def compute_finger_states(landmarks: list[Point]) -> dict[Finger, bool]:
     return states
 
 
+def _download_model() -> bool:
+    """Download the hand landmarker model if not present."""
+    if MODEL_PATH.exists():
+        return True
+
+    logger.info("Downloading hand landmarker model...")
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        import urllib.request
+
+        urllib.request.urlretrieve(MODEL_URL, str(MODEL_PATH))
+        logger.info("Model downloaded to %s", MODEL_PATH)
+        return True
+    except Exception as exc:
+        logger.error("Failed to download model: %s", exc)
+        return False
+
+
 class HandTracker:
-    """MediaPipe hand tracking wrapper.
+    """MediaPipe hand tracking wrapper using the Tasks API.
 
     Processes frames and returns structured hand data with finger states.
+    Uses HandLandmarker from mediapipe.tasks.python.vision.
     """
 
     def __init__(self, config: HandsConfig) -> None:
         self.config = config
-        self._hands = None
+        self._landmarker = None
         self._initialized = False
+        self._frame_timestamp_ms = 0
 
     def initialize(self) -> bool:
-        """Initialize MediaPipe Hands. Lazy init to avoid import at module level."""
+        """Initialize MediaPipe HandLandmarker."""
         try:
-            import mediapipe as mp
+            if not _download_model():
+                return False
 
-            self._hands = mp.solutions.hands.Hands(
-                static_image_mode=False,
-                max_num_hands=self.config.max_hands,
-                min_detection_confidence=self.config.min_detection_confidence,
+            from mediapipe.tasks.python import BaseOptions
+            from mediapipe.tasks.python.vision import (
+                HandLandmarker,
+                HandLandmarkerOptions,
+                RunningMode,
+            )
+
+            base_options = BaseOptions(
+                model_asset_path=str(MODEL_PATH)
+            )
+            options = HandLandmarkerOptions(
+                base_options=base_options,
+                running_mode=RunningMode.VIDEO,
+                num_hands=self.config.max_hands,
+                min_hand_detection_confidence=self.config.min_detection_confidence,
+                min_hand_presence_confidence=self.config.min_detection_confidence,
                 min_tracking_confidence=self.config.min_tracking_confidence,
             )
+            self._landmarker = HandLandmarker.create_from_options(options)
             self._initialized = True
-            logger.info("Hand tracker initialized (max_hands=%d)", self.config.max_hands)
+            logger.info(
+                "Hand tracker initialized (max_hands=%d)", self.config.max_hands
+            )
             return True
         except ImportError:
             logger.error("mediapipe not installed. Run: pip install mediapipe")
+            return False
+        except Exception as exc:
+            logger.error("Failed to initialize hand tracker: %s", exc)
             return False
 
     def process(self, frame: np.ndarray) -> list[HandData]:
@@ -192,27 +240,42 @@ class HandTracker:
             if not self.initialize():
                 return []
 
-        # MediaPipe expects RGB
-        rgb = cv2_to_rgb(frame)
-        results = self._hands.process(rgb)
+        import mediapipe as mp
 
-        if not results.multi_hand_landmarks:
+        # Convert BGR to RGB
+        rgb = cv2_to_rgb(frame)
+
+        # Create MediaPipe Image
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+        # Increment timestamp (must be monotonically increasing for VIDEO mode)
+        self._frame_timestamp_ms += 33  # ~30 FPS
+
+        try:
+            results = self._landmarker.detect_for_video(
+                mp_image, self._frame_timestamp_ms
+            )
+        except Exception as exc:
+            logger.debug("Hand detection error: %s", exc)
+            return []
+
+        if not results.hand_landmarks:
             return []
 
         hands: list[HandData] = []
-        for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+        for idx, hand_landmarks in enumerate(results.hand_landmarks):
             # Extract landmarks as Points
             landmarks = [
-                Point(x=lm.x, y=lm.y) for lm in hand_landmarks.landmark
+                Point(x=lm.x, y=lm.y) for lm in hand_landmarks
             ]
 
             # Get handedness
             handedness = "Right"
             confidence = 0.0
-            if results.multi_handedness and idx < len(results.multi_handedness):
-                classification = results.multi_handedness[idx].classification[0]
-                handedness = classification.label
-                confidence = classification.score
+            if results.handedness and idx < len(results.handedness):
+                category = results.handedness[idx][0]
+                handedness = category.category_name
+                confidence = category.score
 
             # Compute finger states
             finger_states = compute_finger_states(landmarks)
@@ -230,9 +293,9 @@ class HandTracker:
 
     def release(self) -> None:
         """Release MediaPipe resources."""
-        if self._hands is not None:
-            self._hands.close()
-            self._hands = None
+        if self._landmarker is not None:
+            self._landmarker.close()
+            self._landmarker = None
             self._initialized = False
 
 
