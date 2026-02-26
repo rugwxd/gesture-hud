@@ -121,7 +121,12 @@ class SpellRegistry:
         if not trigger:
             return None
 
+        # Try specific trigger first (e.g., "hold_start_fist"),
+        # then fall back to generic (e.g., "swipe_left")
         spell_class = self._gesture_map.get(trigger)
+        if spell_class is None:
+            base_trigger = self._event_to_base(event)
+            spell_class = self._gesture_map.get(base_trigger)
         if spell_class is None:
             return None
 
@@ -218,6 +223,19 @@ class SpellRegistry:
         if gesture_name:
             return f"{base}_{gesture_name}"
         return base
+
+    def _event_to_base(self, event: GestureEvent) -> str:
+        """Convert a gesture event to a base trigger key (no gesture suffix)."""
+        event_map = {
+            GestureEvent.SWIPE_LEFT: "swipe_left",
+            GestureEvent.SWIPE_RIGHT: "swipe_right",
+            GestureEvent.SWIPE_UP: "swipe_up",
+            GestureEvent.SWIPE_DOWN: "swipe_down",
+            GestureEvent.TAP: "tap",
+            GestureEvent.HOLD_START: "hold_start",
+            GestureEvent.HOLD_END: "hold_end",
+        }
+        return event_map.get(event, "")
 
     def clear(self) -> None:
         """Remove all active spells."""

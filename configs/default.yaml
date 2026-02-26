@@ -13,9 +13,9 @@ hands:
 
 gestures:
   swipe_threshold: 0.08
-  hold_duration: 0.5
-  tap_max_duration: 0.3
-  debounce_frames: 5
+  hold_duration: 0.3
+  tap_max_duration: 0.4
+  debounce_frames: 3
 
 particles:
   max_particles: 2000

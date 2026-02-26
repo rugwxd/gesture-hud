@@ -86,8 +86,8 @@ class SpellEngine:
         # Fist hold → Shield
         self.registry.register("hold_start_fist", Shield)
 
-        # Open palm tap → Force Push
-        self.registry.register("tap_open_palm", ForcePush)
+        # Open palm hold → Force Push
+        self.registry.register("hold_start_open_palm", ForcePush)
 
         # Point hold → Lightning
         self.registry.register("hold_start_point", Lightning)
@@ -96,10 +96,10 @@ class SpellEngine:
         self.registry.register("swipe_left", Wind)
         self.registry.register("swipe_right", Wind)
 
-        # Pinch tap → Teleport (pinch then release)
-        self.registry.register("tap_pinch", Teleport)
+        # Pinch hold → Teleport
+        self.registry.register("hold_start_pinch", Teleport)
 
-        # Open palm swipe up → Fireball
+        # Swipe up → Fireball
         self.registry.register("swipe_up", Fireball)
 
     def run(self, source: str | None = None) -> None:

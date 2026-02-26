@@ -41,9 +41,9 @@ class TestGesturesConfig:
     def test_defaults(self):
         config = GesturesConfig()
         assert config.swipe_threshold == 0.08
-        assert config.hold_duration == 0.5
-        assert config.tap_max_duration == 0.3
-        assert config.debounce_frames == 5
+        assert config.hold_duration == 0.3
+        assert config.tap_max_duration == 0.4
+        assert config.debounce_frames == 3
 
 
 class TestParticlesConfig:

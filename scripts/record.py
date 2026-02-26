@@ -71,11 +71,11 @@ def main() -> None:
 
     # Register spells
     registry.register("hold_start_fist", Shield)
-    registry.register("tap_open_palm", ForcePush)
+    registry.register("hold_start_open_palm", ForcePush)
     registry.register("hold_start_point", Lightning)
     registry.register("swipe_left", Wind)
     registry.register("swipe_right", Wind)
-    registry.register("tap_pinch", Teleport)
+    registry.register("hold_start_pinch", Teleport)
     registry.register("swipe_up", Fireball)
 
     # Video writer
