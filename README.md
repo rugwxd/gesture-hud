@@ -5,7 +5,7 @@ Cast magic spells with hand gestures. Real-time augmented reality spell effects 
 ## Quick Start (3 commands)
 
 ```bash
-git clone https://github.com/rugwxd/gesture-hud.git && cd gesture-hud
+git clone https://github.com/rugwed9/gesture-hud.git && cd gesture-hud
 python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 python3 scripts/run.py
 ```
