@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from src.config import (
+    AudioConfig,
     CameraConfig,
-    DetectionConfig,
-    EffectsConfig,
     GesturesConfig,
     HandsConfig,
-    HUDConfig,
     LoggingConfig,
+    ParticlesConfig,
     Settings,
+    SpellsConfig,
     load_config,
 )
 
@@ -37,14 +37,6 @@ class TestHandsConfig:
         assert config.min_tracking_confidence == 0.5
 
 
-class TestDetectionConfig:
-    def test_defaults(self):
-        config = DetectionConfig()
-        assert config.model == "yolov8n.pt"
-        assert config.confidence_threshold == 0.5
-        assert config.run_every_n_frames == 3
-
-
 class TestGesturesConfig:
     def test_defaults(self):
         config = GesturesConfig()
@@ -54,24 +46,28 @@ class TestGesturesConfig:
         assert config.debounce_frames == 5
 
 
-class TestHUDConfig:
+class TestParticlesConfig:
     def test_defaults(self):
-        config = HUDConfig()
-        assert config.default_mode == "combat"
-        assert config.color_primary == [0, 255, 200]
-        assert config.opacity == 0.8
-
-    def test_custom_colors(self):
-        config = HUDConfig(color_primary=[255, 0, 0])
-        assert config.color_primary == [255, 0, 0]
-
-
-class TestEffectsConfig:
-    def test_defaults(self):
-        config = EffectsConfig()
+        config = ParticlesConfig()
+        assert config.max_particles == 2000
         assert config.glow_enabled is True
-        assert config.scanlines_enabled is True
-        assert config.holographic_flicker is True
+        assert config.glow_intensity == 0.3
+
+
+class TestSpellsConfig:
+    def test_defaults(self):
+        config = SpellsConfig()
+        assert config.max_mana == 100
+        assert config.mana_regen == 8.0
+        assert config.show_mana_bar is True
+        assert config.show_spell_name is True
+
+
+class TestAudioConfig:
+    def test_defaults(self):
+        config = AudioConfig()
+        assert config.enabled is True
+        assert config.volume == 0.5
 
 
 class TestSettings:
@@ -79,15 +75,15 @@ class TestSettings:
         settings = Settings()
         assert isinstance(settings.camera, CameraConfig)
         assert isinstance(settings.hands, HandsConfig)
-        assert isinstance(settings.detection, DetectionConfig)
-        assert isinstance(settings.hud, HUDConfig)
-        assert isinstance(settings.effects, EffectsConfig)
+        assert isinstance(settings.particles, ParticlesConfig)
+        assert isinstance(settings.spells, SpellsConfig)
+        assert isinstance(settings.audio, AudioConfig)
         assert isinstance(settings.logging, LoggingConfig)
 
     def test_nested_override(self):
         settings = Settings(camera=CameraConfig(fps=60))
         assert settings.camera.fps == 60
-        assert settings.camera.width == 1280  # Default preserved
+        assert settings.camera.width == 1280
 
 
 class TestLoadConfig:
@@ -98,7 +94,7 @@ class TestLoadConfig:
 
     def test_load_nonexistent_file(self):
         settings = load_config("/nonexistent/config.yaml")
-        assert isinstance(settings, Settings)  # Falls back to defaults
+        assert isinstance(settings, Settings)
 
     def test_load_from_yaml(self, tmp_path):
         yaml_content = """
@@ -107,9 +103,13 @@ camera:
   height: 1080
   fps: 60
 
-hud:
-  default_mode: scan
-  opacity: 0.5
+spells:
+  max_mana: 200
+  mana_regen: 15.0
+
+audio:
+  enabled: false
+  volume: 0.3
 """
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text(yaml_content)
@@ -117,5 +117,7 @@ hud:
         settings = load_config(str(config_file))
         assert settings.camera.width == 1920
         assert settings.camera.height == 1080
-        assert settings.hud.default_mode == "scan"
-        assert settings.hud.opacity == 0.5
+        assert settings.spells.max_mana == 200
+        assert settings.spells.mana_regen == 15.0
+        assert settings.audio.enabled is False
+        assert settings.audio.volume == 0.3

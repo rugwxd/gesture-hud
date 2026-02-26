@@ -177,7 +177,8 @@ def _synth_lightning() -> np.ndarray:
 
     # Random amplitude modulation for crackle effect
     rng = np.random.default_rng(42)
-    crackle = np.abs(rng.standard_normal(len(t) // 100))
+    num_blocks = -(-len(t) // 100)  # Ceiling division
+    crackle = np.abs(rng.standard_normal(num_blocks))
     crackle = np.repeat(crackle, 100)[: len(t)]
 
     env = _envelope(len(t), attack=0.005, release=0.15)
